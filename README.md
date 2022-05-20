@@ -4,6 +4,22 @@
 ```bash
 python3 -m pip install --user git+https://github.com/windzu/pypcd.git
 ```
+## usage
+```python
+from pypcd import pypcd
+# 处理ros的pointcloud2消息
+pc = pypcd.PointCloud.from_msg(data)
+x = pc.pc_data['x']
+y = pc.pc_data['y']
+z = pc.pc_data['z']
+
+# 处理pcd文件
+pc = pypcd.PointCloud.from_path('foo.pcd')
+x = pc.pc_data['x']
+y = pc.pc_data['y']
+z = pc.pc_data['z']
+```
+
 ## fork本库的原因
 原始pypcd是基于python2写的，与python3存在兼容问题，fork的这个库做了修改，防止库用不到了fork下
 
