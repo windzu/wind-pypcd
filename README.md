@@ -1,5 +1,11 @@
 ``pypcd``
 =======
+## 安装方式
+```bash
+python3 -m pip install --user git+https://github.com/windzu/pypcd.git
+```
+## fork本库的原因
+原始pypcd是基于python2写的，与python3存在兼容问题，fork的这个库做了修改，防止库用不到了fork下
 
 What?
 ----
