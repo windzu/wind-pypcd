@@ -1,6 +1,5 @@
 .*.swp
 *.pyc
-pypcd.egg-info
 build
 dist
 bin
@@ -10,3 +9,5 @@ include
 .idea
 pip-selfcheck.json
 .pytest_cache/
+.vscode/
+*.egg-info/

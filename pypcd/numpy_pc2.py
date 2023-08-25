@@ -1,3 +1,11 @@
+'''
+Author: wind windzu1@gmail.com
+Date: 2023-08-25 17:16:49
+LastEditors: wind windzu1@gmail.com
+LastEditTime: 2023-08-25 17:38:24
+Description: 
+Copyright (c) 2023 by windzu, All Rights Reserved. 
+'''
 # Software License Agreement (BSD License)
 #
 # Copyright (c) 2008, Willow Garage, Inc.
@@ -39,9 +47,7 @@ Functions for working with PointCloud2.
 __docformat__ = "restructuredtext en"
 
 import numpy as np
-
-from sensor_msgs.msg import PointField
-from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import PointCloud2, PointField
 
 # prefix to the names of dummy fields we add to get byte alignment correct. this needs to not
 # clash with any actual field names
@@ -298,7 +304,7 @@ def split_rgb_field(cloud_arr):
             new_cloud_arr[field_name] = cloud_arr[field_name]
     return new_cloud_arr
 
-def get_xyz_points(cloud_array, remove_nans=True, dtype=np.float):
+def get_xyz_points(cloud_array, remove_nans=True, dtype=float):
     '''Pulls out x, y, and z columns from the cloud recordarray, and returns
 	a 3xN matrix.
     '''

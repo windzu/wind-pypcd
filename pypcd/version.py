@@ -1,9 +1,17 @@
+"""
+Author: wind windzu1@gmail.com
+Date: 2023-08-25 17:16:49
+LastEditors: wind windzu1@gmail.com
+LastEditTime: 2023-08-25 17:29:00
+Description: 
+Copyright (c) 2023 by windzu, All Rights Reserved. 
+"""
 from os.path import join as pjoin
 
 # Format expected by setup.py and doc/source/conf.py: string of form "X.Y.Z"
 _version_major = 0
 _version_minor = 1
-_version_micro = 1  # use '' for first of series, number for 1 and above
+_version_micro = 2  # use '' for first of series, number for 1 and above
 _version_extra = None  # Uncomment this for full releases
 
 # Construct full version string from these.
@@ -13,15 +21,17 @@ if _version_micro:
 if _version_extra:
     _ver.append(_version_extra)
 
-__version__ = '.'.join(map(str, _ver))
+__version__ = ".".join(map(str, _ver))
 
-CLASSIFIERS = ["Development Status :: 3 - Alpha",
-               "Environment :: Console",
-               "Intended Audience :: Science/Research",
-               "License :: OSI Approved :: MIT License",
-               "Operating System :: OS Independent",
-               "Programming Language :: Python",
-               "Topic :: Scientific/Engineering"]
+CLASSIFIERS = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Topic :: Scientific/Engineering",
+]
 
 # Description should be a one-liner:
 description = "Pure Python PCD reader/writer"
@@ -48,12 +58,12 @@ All trademarks referenced herein are property of their respective holders.
 Copyright (c) 2015--, Daniel Maturana
 """
 
-NAME = "pypcd"
-MAINTAINER = "Daniel Maturana"
-MAINTAINER_EMAIL = "dimatura@cmu.edu"
+NAME = "wind_pypcd"
+MAINTAINER = "Wind Zu"
+MAINTAINER_EMAIL = "windzu1@gmail.com"
 DESCRIPTION = description
 LONG_DESCRIPTION = long_description
-URL = "http://github.com/dimatura/pypcd"
+URL = "http://github.com/windzu/wind_pypcd"
 DOWNLOAD_URL = ""
 LICENSE = "MIT"
 AUTHOR = "Daniel Maturana"
@@ -63,7 +73,6 @@ MAJOR = _version_major
 MINOR = _version_minor
 MICRO = _version_micro
 VERSION = __version__
-PACKAGES = ['pypcd',
-            'pypcd.tests']
-PACKAGE_DATA = {'pypcd': [pjoin('data', '*')]}
+PACKAGES = ["pypcd", "pypcd.tests"]
+PACKAGE_DATA = {"pypcd": [pjoin("data", "*")]}
 INSTALL_REQUIRES = ["numpy", "python-lzf"]

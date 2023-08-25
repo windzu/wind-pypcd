@@ -1,30 +1,47 @@
-# WARNING
-本仓库不再维护，相关的功能移植至wadda项目中
-
-``pypcd``
+<!--
+ * @Author: wind windzu1@gmail.com
+ * @Date: 2023-08-25 17:16:49
+ * @LastEditors: wind windzu1@gmail.com
+ * @LastEditTime: 2023-08-25 18:09:08
+ * @Description: 
+ * Copyright (c) 2023 by windzu, All Rights Reserved. 
+-->
+``wind_pypcd``
 =======
 ## 安装方式
 ```bash
-python3 -m pip install --user git+https://github.com/windzu/pypcd.git
+pip3 install wind-pypcd
 ```
 ## usage
 ```python
 from pypcd import pypcd
-# 处理ros的pointcloud2消息
+# 读取ros的pointcloud2消息
 pc = pypcd.PointCloud.from_msg(data)
 x = pc.pc_data['x']
 y = pc.pc_data['y']
 z = pc.pc_data['z']
 
-# 处理pcd文件
+# 读取pcd文件
 pc = pypcd.PointCloud.from_path('foo.pcd')
 x = pc.pc_data['x']
 y = pc.pc_data['y']
 z = pc.pc_data['z']
-```
 
-## fork本库的原因
-原始pypcd是基于python2写的，与python3存在兼容问题，fork的这个库做了修改，防止库用不到了fork下
+# 保存pcd
+pc = pypcd.PointCloud.from_msg(msg)
+pc.save_pcd('foo.pcd', compression='binary_compressed')
+```
+## 本库的特点
+- 基于python3
+- 支持ros的pointcloud2消息
+- 目前还在维护,但是不会频繁，大概率是仅解决一些依赖库的问题
+- 可通过pip安装
+
+## 创建本库的原因
+- 在python下一直没有对pcd的很好的支持库，于是pypcd作者基于python2实现了一个，但python2已经不再维护，所以[klintan](https://github.com/klintan/pypcd)基于python3重新实现了一个,本仓库便是fork自此[pypcd](https://github.com/klintan/pypcd)
+- 原仓库太久没有维护，导致很多基于numpy的方法已经失效，本仓库在此基础上进行了修复
+- 无法通过pip安装，作为依赖使用起来不方便，所以本仓库托管在了pypi上，可以通过pip安装，但是因为原仓库的名字已经被占用，所以本仓库的名字为wind_pypcd
+
 
 What?
 ----
