@@ -2,15 +2,20 @@
  * @Author: wind windzu1@gmail.com
  * @Date: 2023-08-25 17:16:49
  * @LastEditors: wind windzu1@gmail.com
- * @LastEditTime: 2023-08-25 18:09:08
+ * @LastEditTime: 2023-08-30 12:52:47
  * @Description: 
  * Copyright (c) 2023 by windzu, All Rights Reserved. 
 -->
 ``wind_pypcd``
 =======
 ## 安装方式
+### 稳定版本
 ```bash
 pip3 install wind-pypcd
+```
+### 开发模式
+```bash
+pip install -v -e .   
 ```
 ## usage
 ```python
