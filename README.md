@@ -1,8 +1,8 @@
 <!--
  * @Author: wind windzu1@gmail.com
  * @Date: 2023-08-25 17:16:49
- * @LastEditors: wind windzu1@gmail.com
- * @LastEditTime: 2023-08-30 12:52:47
+ * @LastEditors: windzu windzu1@gmail.com
+ * @LastEditTime: 2023-09-10 15:29:40
  * @Description: 
  * Copyright (c) 2023 by windzu, All Rights Reserved. 
 -->
@@ -15,7 +15,7 @@ pip3 install wind-pypcd
 ```
 ### 开发模式
 ```bash
-pip install -v -e .   
+pip3 install -v -e .   
 ```
 ## usage
 ```python

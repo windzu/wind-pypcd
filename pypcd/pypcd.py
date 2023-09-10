@@ -7,15 +7,13 @@ Description:
 Copyright (c) 2023 by windzu, All Rights Reserved. 
 """
 """
-Read and write PCL .pcd files in python.
-dimatura@cmu.edu, 2013
-
 TODO deal properly with padding
 TODO deal properly with multicount fields
 TODO better support for rgb nonsense
 """
 
 import copy
+import os
 import re
 import struct
 import warnings
@@ -638,6 +636,36 @@ def make_xyz_label_point_cloud(xyzl, label_type="f"):
     return pc
 
 
+def save_bin(pc, fname, format="xyzi"):
+    """将点云保存为"纯"二进制文件,与pcd格式相比,缺少了文件头信息,只保存了点云数据"""
+    x, y, z, intensity = None, None, None, None
+    x = pc.pc_data["x"].flatten()
+    y = pc.pc_data["y"].flatten()
+    z = pc.pc_data["z"].flatten()
+    intensity = pc.pc_data["intensity"].flatten()
+
+    pc_array = None
+    if format == "xyzi":
+        pc_array_4d = np.zeros((x.shape[0], 4), dtype=np.float32)
+        pc_array_4d[:, 0] = x
+        pc_array_4d[:, 1] = y
+        pc_array_4d[:, 2] = z
+        pc_array_4d[:, 3] = intensity
+        nan_index = np.isnan(x) | np.isnan(y) | np.isnan(z) | np.isnan(intensity)
+        pc_array_4d = pc_array_4d[~nan_index]
+        pc_array = pc_array_4d
+    elif format == "xyz":
+        pc_array_3d = np.zeros((x.shape[0], 3), dtype=np.float32)
+        pc_array_3d[:, 0] = x
+        pc_array_3d[:, 1] = y
+        pc_array_3d[:, 2] = z
+        nan_index = np.isnan(x) | np.isnan(y) | np.isnan(z)
+        pc_array_3d = pc_array_3d[~nan_index]
+        pc_array = pc_array_3d
+
+    pc_array.tofile(fname)
+
+
 class PointCloud(object):
     def __init__(self, metadata, pc_data):
         self.metadata_keys = metadata.keys()
@@ -682,6 +710,9 @@ class PointCloud(object):
             warnings.warn("data_compression keyword is deprecated for" " compression")
             compression = kwargs["data_compression"]
         return point_cloud_to_buffer(self, compression)
+
+    def save_bin(self, fname, format="xyzi"):
+        save_bin(self, fname, format)
 
     def save_txt(self, fname):
         save_txt(self, fname)
@@ -774,5 +805,64 @@ class PointCloud(object):
         pc_data = np.squeeze(numpy_pc2.pointcloud2_to_array(msg))
         md["width"] = len(pc_data)
         md["points"] = len(pc_data)
+        pc = PointCloud(md, pc_data)
+        return pc
+
+    @staticmethod
+    def from_bin(bin_file, format="xyzi"):
+        """from binary file"""
+        # check if file exists
+        if not os.path.exists(bin_file):
+            raise Exception("file not found: %s" % bin_file)
+        md = {
+            "version": 0.7,
+            "fields": [],
+            "size": [],
+            "count": [],
+            "width": 0,
+            "height": 1,
+            "viewpoint": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+            "points": 0,
+            "type": [],
+            "data": "binary_compressed",
+        }
+
+        # load data
+        pc_data = None
+        if format == "xyzi":
+            # pc_data = np.fromfile(bin_file, dtype=np.float32).reshape(-1, 4)
+            # pc_data.dtype.names = ("x", "y", "z", "intensity")
+            dtype = np.dtype(
+                [
+                    ("x", np.float32),
+                    ("y", np.float32),
+                    ("z", np.float32),
+                    ("intensity", np.float32),
+                ]
+            )
+            pc_data = np.fromfile(bin_file, dtype=dtype)
+            # fill metadata
+            md["fields"] = ["x", "y", "z", "intensity"]
+            md["type"] = ["F", "F", "F", "F"]
+            md["size"] = [4, 4, 4, 4]
+            md["count"] = [1, 1, 1, 1]
+        elif format == "xyz":
+            # pc_data = np.fromfile(bin_file, dtype=np.float32).reshape(-1, 3)
+            # pc_data.dtype.names = ("x", "y", "z")
+            dtype = np.dtype([("x", np.float32), ("y", np.float32), ("z", np.float32)])
+            pc_data = np.fromfile(bin_file, dtype=dtype)
+
+            # fill metadata
+            md["fields"] = ["x", "y", "z"]
+            md["type"] = ["F", "F", "F"]
+            md["size"] = [4, 4, 4]
+            md["count"] = [1, 1, 1]
+        else:
+            raise ValueError("format must be xyzi or xyz")
+
+        md["width"] = pc_data.shape[0]
+        md["points"] = pc_data.shape[0]
+
+        # create point cloud
         pc = PointCloud(md, pc_data)
         return pc
