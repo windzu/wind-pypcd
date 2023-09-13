@@ -1,8 +1,8 @@
 <!--
  * @Author: wind windzu1@gmail.com
  * @Date: 2023-08-25 17:16:49
- * @LastEditors: windzu windzu1@gmail.com
- * @LastEditTime: 2023-09-11 02:04:27
+ * @LastEditors: wind windzu1@gmail.com
+ * @LastEditTime: 2023-09-13 22:32:03
  * @Description: 
  * Copyright (c) 2023 by windzu, All Rights Reserved. 
 -->
@@ -34,6 +34,9 @@ z = pc.pc_data['z']
 
 # 读取bin文件
 pc = pypcd.PointCloud.from_bin("foo.bin", format="xyzi")
+
+# 读取 numpy array
+pc = pypcd.PointCloud.from_array_without_dtype(arr, format="xyzi")
 
 # 保存pcd
 pc = pypcd.PointCloud.from_msg(msg)
