@@ -775,6 +775,85 @@ class PointCloud(object):
         return pc
 
     @staticmethod
+    def from_array_without_dtype(arr, format="xyzi"):
+        """create a PointCloud object from an array."""
+        pc_data = arr.copy()
+
+        md = {
+            "version": 0.7,
+            "fields": [],
+            "size": [],
+            "count": [],
+            "width": 0,
+            "height": 1,
+            "viewpoint": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+            "points": 0,
+            "type": [],
+            "data": "binary_compressed",
+        }
+
+        if format == "xyzi":
+            dtype = np.dtype(
+                [
+                    ("x", np.float32),
+                    ("y", np.float32),
+                    ("z", np.float32),
+                    ("intensity", np.float32),
+                ]
+            )
+            # append dtype info to pc_data
+            pc_data = np.array(
+                [tuple(x) for x in pc_data],
+                dtype=dtype,
+            )
+            # fill metadata
+            md["fields"] = ["x", "y", "z", "intensity"]
+            md["type"] = ["F", "F", "F", "F"]
+            md["size"] = [4, 4, 4, 4]
+            md["count"] = [1, 1, 1, 1]
+        elif format == "xyz":
+            dtype = np.dtype([("x", np.float32), ("y", np.float32), ("z", np.float32)])
+            pc_data = np.array(
+                [tuple(x) for x in pc_data],
+                dtype=dtype,
+            )
+
+            # fill metadata
+            md["fields"] = ["x", "y", "z"]
+            md["type"] = ["F", "F", "F"]
+            md["size"] = [4, 4, 4]
+            md["count"] = [1, 1, 1]
+        else:
+            raise ValueError("format must be xyzi or xyz")
+
+        md["width"] = pc_data.shape[0]
+        md["points"] = pc_data.shape[0]
+
+        md = {
+            "version": 0.7,
+            "fields": [],
+            "size": [],
+            "count": [],
+            "width": 0,
+            "height": 1,
+            "viewpoint": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+            "points": 0,
+            "type": [],
+            "data": "binary_compressed",
+        }
+        md["fields"] = pc_data.dtype.names
+        for field in md["fields"]:
+            type_, size_ = numpy_type_to_pcd_type[pc_data.dtype.fields[field][0]]
+            md["type"].append(type_)
+            md["size"].append(size_)
+            # TODO handle multicount
+            md["count"].append(1)
+        md["width"] = len(pc_data)
+        md["points"] = len(pc_data)
+        pc = PointCloud(md, pc_data)
+        return pc
+
+    @staticmethod
     def from_msg(msg, squeeze=True):
         """from pointcloud2 msg
         squeeze: fix when clouds get 1 as first dim
