@@ -734,6 +734,9 @@ class PointCloud(object):
         # TODO is there some metadata we want to attach?
         return numpy_pc2.array_to_pointcloud2(self.pc_data)
 
+    def to_array(self):
+        return self.pc_data.view(np.float32).reshape(self.pc_data.shape + (-1,))
+
     @staticmethod
     def from_path(fname):
         return point_cloud_from_path(fname)
