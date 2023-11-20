@@ -1,5 +1,13 @@
 """
 Author: wind windzu1@gmail.com
+Date: 2023-11-01 13:58:59
+LastEditors: wind windzu1@gmail.com
+LastEditTime: 2023-11-20 19:11:33
+Description: 
+Copyright (c) 2023 by windzu, All Rights Reserved. 
+"""
+"""
+Author: wind windzu1@gmail.com
 Date: 2023-08-30 12:50:13
 LastEditors: wind windzu1@gmail.com
 LastEditTime: 2023-08-30 13:09:38
@@ -928,6 +936,22 @@ class PointCloud(object):
             md["type"] = ["F", "F", "F", "F"]
             md["size"] = [4, 4, 4, 4]
             md["count"] = [1, 1, 1, 1]
+        elif format == "xyzir":
+            # x y z intensity ring
+            dtype = np.dtype(
+                [
+                    ("x", np.float32),
+                    ("y", np.float32),
+                    ("z", np.float32),
+                    ("intensity", np.float32),
+                    ("ring", np.int32),
+                ]
+            )
+            pc_data = np.fromfile(bin_file, dtype=dtype)
+            md["fields"] = ["x", "y", "z", "intensity", "ring"]
+            md["type"] = ["F", "F", "F", "F", "F"]
+            md["size"] = [4, 4, 4, 4, 4]
+            md["count"] = [1, 1, 1, 1, 1]
         elif format == "xyz":
             # pc_data = np.fromfile(bin_file, dtype=np.float32).reshape(-1, 3)
             # pc_data.dtype.names = ("x", "y", "z")
