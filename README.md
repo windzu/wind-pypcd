@@ -44,6 +44,10 @@ pc.save_pcd('foo.pcd', compression='binary_compressed')
 
 # 保存bin
 pc.save_bin("foo.bin", "xyzi")
+
+# 导出为numpy array
+# 默认导出为float32 x,y,z,i 四个字段 如果没有i字段则导出为float32 x,y,z
+arr=pc.to_np_array()
 ```
 
 ## 本库的特点

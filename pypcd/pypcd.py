@@ -745,12 +745,42 @@ class PointCloud(object):
     def to_array(self):
         return self.pc_data.view(np.float32).reshape(self.pc_data.shape + (-1,))
 
+    def to_np_array(self):
+        # check if x y z i exists
+        if "x" not in self.pc_data.dtype.names:
+            raise Exception("x field does not exist")
+        if "y" not in self.pc_data.dtype.names:
+            raise Exception("y field does not exist")
+        if "z" not in self.pc_data.dtype.names:
+            raise Exception("z field does not exist")
+
+        exist_intensity = True
+        if "intensity" not in self.pc_data.dtype.names:
+            exist_intensity = False
+        x = self.pc_data["x"].flatten()
+        y = self.pc_data["y"].flatten()
+        z = self.pc_data["z"].flatten()
+        nan_index = np.isnan(x) | np.isnan(y) | np.isnan(z)
+        x = x[~nan_index]
+        y = y[~nan_index]
+        z = z[~nan_index]
+
+        if exist_intensity:
+            intensity = self.pc_data["intensity"].flatten()
+            intensity = intensity[~nan_index]
+            return np.array([x, y, z, intensity]).T
+        else:
+            return np.array([x, y, z]).T
     @staticmethod
     def from_path(fname):
         return point_cloud_from_path(fname)
 
     @staticmethod
     def from_fileobj(fileobj):
+        return point_cloud_from_fileobj(fileobj)
+
+    @staticmethod
+    def from_pcd(fileobj):
         return point_cloud_from_fileobj(fileobj)
 
     @staticmethod

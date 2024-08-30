@@ -1,25 +1,9 @@
-"""
-Author: wind windzu1@gmail.com
-Date: 2023-11-01 13:58:59
-LastEditors: wind windzu1@gmail.com
-LastEditTime: 2023-11-20 19:35:45
-Description: 
-Copyright (c) 2023 by windzu, All Rights Reserved. 
-"""
-"""
-Author: wind windzu1@gmail.com
-Date: 2023-08-30 12:50:13
-LastEditors: wind windzu1@gmail.com
-LastEditTime: 2023-08-30 14:17:21
-Description: 
-Copyright (c) 2023 by windzu, All Rights Reserved. 
-"""
 from os.path import join as pjoin
 
 # Format expected by setup.py and doc/source/conf.py: string of form "X.Y.Z"
 _version_major = 0
 _version_minor = 1
-_version_micro = 7  # use '' for first of series, number for 1 and above
+_version_micro = 9  # use '' for first of series, number for 1 and above
 _version_extra = None  # Uncomment this for full releases
 
 # Construct full version string from these.
