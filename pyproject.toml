@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+dependencies = ["numpy", "python-lzf"]
+name = "wind-pypcd"
+version = "0.2.0"
+description = "tools for pcd files"
+authors = [{ name = "windzu", email = "windzu1@gmail.com" }]
+readme = "README.md"
+license = { text = "MIT" }
+keywords = ["pcd", "point cloud", "lidar", "tools"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+]
+requires-python = ">=3.6,<3.9"
+
+[project.scripts]
+wind-pypcd = "wind_pypcd.main:main"
+
+[tool.setuptools]
+include-package-data = true

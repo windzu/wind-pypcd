@@ -25,7 +25,7 @@ import os
 import re
 import struct
 import warnings
-from io import StringIO as sio
+from io import StringIO
 
 import lzf
 import numpy as np
@@ -46,6 +46,8 @@ __all__ = [
     "point_cloud_from_path",
     "point_cloud_from_buffer",
     "point_cloud_from_fileobj",
+    "point_cloud_from_bytes",
+    "point_cloud_to_bytes", 
     "make_xyz_point_cloud",
     "make_xyz_rgb_point_cloud",
     "make_xyz_label_point_cloud",
@@ -326,10 +328,122 @@ def point_cloud_from_path(fname):
 
 
 def point_cloud_from_buffer(buf):
-    fileobj = sio.StringIO(buf)
+    """从字符串缓冲区加载点云数据
+    
+    Args:
+        buf (str): PCD格式的字符串数据
+        
+    Returns:
+        PointCloud: 点云对象
+    """
+    fileobj = StringIO(buf)
     pc = point_cloud_from_fileobj(fileobj)
     fileobj.close()  # necessary?
     return pc
+
+
+def point_cloud_from_bytes(data):
+    """从字节数据加载点云数据
+    
+    Args:
+        data (bytes): PCD格式的字节数据
+        
+    Returns:
+        PointCloud: 点云对象
+    """
+    import io
+
+    # 先查找头部结束位置（DATA行之后）
+    data_pos = data.find(b'DATA ')
+    if data_pos == -1:
+        raise ValueError("Invalid PCD format: DATA field not found")
+    
+    # 找到DATA行的结尾
+    data_line_end = data.find(b'\n', data_pos)
+    if data_line_end == -1:
+        raise ValueError("Invalid PCD format: DATA line incomplete")
+    
+    # 提取头部信息
+    header_bytes = data[:data_line_end + 1]
+    try:
+        header_str = header_bytes.decode('utf-8')
+    except UnicodeDecodeError:
+        try:
+            header_str = header_bytes.decode('latin-1')
+        except UnicodeDecodeError:
+            raise ValueError("Unable to decode PCD header")
+    
+    # 检查数据格式
+    if b'DATA ascii' in data:
+        # ASCII格式，整个文件都可以解码为字符串
+        try:
+            buf = data.decode('utf-8')
+        except UnicodeDecodeError:
+            buf = data.decode('latin-1')
+        return point_cloud_from_buffer(buf)
+    else:
+        # 二进制格式，需要特殊处理
+        # 创建一个临时文件对象来处理二进制数据
+        import tempfile
+        with tempfile.NamedTemporaryFile() as tmp_file:
+            tmp_file.write(data)
+            tmp_file.flush()
+            tmp_file.seek(0)
+            return point_cloud_from_fileobj(tmp_file)
+
+
+def point_cloud_to_bytes(pc, compression=None):
+    """将点云数据转换为字节数据
+    
+    Args:
+        pc (PointCloud): 点云对象
+        compression (str): 压缩格式，可选 "ascii", "binary", "binary_compressed"
+        
+    Returns:
+        bytes: PCD格式的字节数据
+    """
+    import io
+
+    # 首先转换为字符串缓冲区
+    string_buffer = StringIO()
+    
+    # 获取元数据并写入头部
+    metadata = pc.get_metadata()
+    if compression is not None:
+        compression = compression.lower()
+        assert compression in ("ascii", "binary", "binary_compressed")
+        metadata["data"] = compression
+
+    header = write_header(metadata)
+    string_buffer.write(header)
+    
+    if metadata["data"].lower() == "ascii":
+        fmtstr = build_ascii_fmtstr(pc)
+        np.savetxt(string_buffer, pc.pc_data, fmt=fmtstr)
+        # 对于ASCII格式，返回编码后的字节数据
+        return string_buffer.getvalue().encode('utf-8')
+    else:
+        # 对于二进制格式，需要混合处理
+        header_bytes = string_buffer.getvalue().encode('utf-8')
+        data_bytes = b""  # 初始化data_bytes
+        
+        if metadata["data"].lower() == "binary":
+            data_bytes = pc.pc_data.tobytes()
+        elif metadata["data"].lower() == "binary_compressed":
+            # 重新实现压缩逻辑
+            uncompressed_lst = []
+            for fieldname in pc.pc_data.dtype.names:
+                column = np.ascontiguousarray(pc.pc_data[fieldname]).tobytes()
+                uncompressed_lst.append(column)
+            uncompressed = b"".join(uncompressed_lst)
+            uncompressed_size = len(uncompressed)
+            # 使用lzf压缩
+            compressed = lzf.compress(uncompressed)
+            compressed_size = len(compressed)
+            # 写入压缩头部信息
+            data_bytes = struct.pack("<II", compressed_size, uncompressed_size) + compressed
+        
+        return header_bytes + data_bytes
 
 
 def point_cloud_to_fileobj(pc, fileobj, data_compression=None):
@@ -384,7 +498,7 @@ def point_cloud_to_path(pc, fname):
 
 
 def point_cloud_to_buffer(pc, data_compression=None):
-    fileobj = sio.StringIO()
+    fileobj = StringIO()
     point_cloud_to_fileobj(pc, fileobj, data_compression)
     return fileobj.getvalue()
 
@@ -788,6 +902,15 @@ class PointCloud(object):
         return point_cloud_from_buffer(buf)
 
     @staticmethod
+    def from_bytes(data):
+        """从字节数据创建PointCloud对象"""
+        return point_cloud_from_bytes(data)
+
+    def to_bytes(self, compression=None):
+        """将PointCloud对象转换为字节数据"""
+        return point_cloud_to_bytes(self, compression)
+
+    @staticmethod
     def from_array(arr):
         """create a PointCloud object from an array."""
         pc_data = arr.copy()
@@ -1001,4 +1124,6 @@ class PointCloud(object):
 
         # create point cloud
         pc = PointCloud(md, pc_data)
+        return pc
+        return pc
         return pc

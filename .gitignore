@@ -11,3 +11,4 @@ pip-selfcheck.json
 .pytest_cache/
 .vscode/
 *.egg-info/
+test_data/results/
