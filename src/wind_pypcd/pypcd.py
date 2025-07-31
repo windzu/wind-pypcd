@@ -1,25 +1,3 @@
-"""
-Author: wind windzu1@gmail.com
-Date: 2023-11-01 13:58:59
-LastEditors: wind windzu1@gmail.com
-LastEditTime: 2023-11-20 19:11:33
-Description: 
-Copyright (c) 2023 by windzu, All Rights Reserved. 
-"""
-"""
-Author: wind windzu1@gmail.com
-Date: 2023-08-30 12:50:13
-LastEditors: wind windzu1@gmail.com
-LastEditTime: 2023-08-30 13:09:38
-Description: 
-Copyright (c) 2023 by windzu, All Rights Reserved. 
-"""
-"""
-TODO deal properly with padding
-TODO deal properly with multicount fields
-TODO better support for rgb nonsense
-"""
-
 import copy
 import os
 import re
