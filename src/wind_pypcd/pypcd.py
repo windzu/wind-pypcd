@@ -41,6 +41,9 @@ __all__ = [
     "save_point_cloud_bin_compressed",
     "pcd_type_to_numpy_type",
     "numpy_type_to_pcd_type",
+    "pcd_to_bin",
+    "pointcloud_to_bin",
+    "pcd_bytes_to_bin",
 ]
 
 if HAS_SENSOR_MSGS:
@@ -687,7 +690,7 @@ def encode_rgb_for_pcl(rgb):
     rgb = np.array(
         (rgb[:, 0] << 16) | (rgb[:, 1] << 8) | (rgb[:, 2] << 0), dtype=np.uint32
     )
-    rgb.dtype = np.float32
+    rgb = np.asarray(rgb, dtype=np.float32)
     return rgb
 
 
@@ -764,6 +767,166 @@ def save_bin(pc, fname, format="xyzi"):
         pc_array = pc_array_3d
 
     pc_array.tofile(fname)
+
+
+# ================= PCD -> BIN 扩展功能（xyz/xyzi/xyzit） =================
+_TIME_ALIASES = ("t", "time", "timestamp")
+_INTENSITY_ALIASES = ("intensity", "i")
+
+
+def _lower_name_map(dtype_names):
+    return {name.lower(): name for name in dtype_names}
+
+
+def _find_any_field(name_map, candidates):
+    for n in candidates:
+        actual = name_map.get(n)
+        if actual is not None:
+            return actual
+    return None
+
+
+def _normalize_set(dtype_names):
+    norm = set()
+    for n in dtype_names:
+        ln = n.lower()
+        if ln in ("x", "y", "z"):
+            norm.add(ln)
+        elif ln in _INTENSITY_ALIASES:
+            norm.add("intensity")
+        elif ln in _TIME_ALIASES:
+            norm.add("time")
+        else:
+            norm.add(ln)
+    return norm
+
+
+def _infer_target_format_from_pc(pc):
+    names = tuple(pc.pc_data.dtype.names)
+    name_map = _lower_name_map(names)
+    norm = _normalize_set(names)
+
+    if norm == {"x", "y", "z"}:
+        return "xyz"
+    if norm == {"x", "y", "z", "intensity"}:
+        return "xyzi"
+    if norm == {"x", "y", "z", "intensity", "time"}:
+        return "xyzit"
+
+    has_x = name_map.get("x") is not None
+    has_y = name_map.get("y") is not None
+    has_z = name_map.get("z") is not None
+    inten = _find_any_field(name_map, _INTENSITY_ALIASES)
+    if has_x and has_y and has_z and inten is not None:
+        warnings.warn("PCD 字段不在支持的精确集合内，已回退导出为 xyzi（忽略其它字段）")
+        return "xyzi"
+    raise ValueError(
+        "无法自动推断 BIN 格式：需要精确的 xyz/xyzi/xyzit，或至少包含 xyz 与 intensity 以回退为 xyzi"
+    )
+
+
+def _compose_bin_data(pc, target_format, default_intensity=None, default_time=None):
+    names = tuple(pc.pc_data.dtype.names)
+    name_map = _lower_name_map(names)
+
+    for req in ("x", "y", "z"):
+        if name_map.get(req) is None:
+            raise ValueError(f"PCD 缺少必需字段: {req}")
+
+    x = pc.pc_data[name_map["x"]].astype(np.float32).flatten()
+    y = pc.pc_data[name_map["y"]].astype(np.float32).flatten()
+    z = pc.pc_data[name_map["z"]].astype(np.float32).flatten()
+
+    cols = [x, y, z]
+
+    if target_format in ("xyzi", "xyzit"):
+        inten_name = _find_any_field(name_map, _INTENSITY_ALIASES)
+        if inten_name is not None:
+            i_col = pc.pc_data[inten_name].astype(np.float32).flatten()
+        else:
+            if default_intensity is None:
+                raise ValueError("缺少 intensity 字段且未提供 default_intensity")
+            i_col = np.full_like(x, float(default_intensity), dtype=np.float32)
+        cols.append(i_col)
+
+    if target_format == "xyzit":
+        t_name = _find_any_field(name_map, _TIME_ALIASES)
+        if t_name is not None:
+            t_col = pc.pc_data[t_name].astype(np.float32).flatten()
+        else:
+            if default_time is None:
+                raise ValueError("缺少 time 字段且未提供 default_time")
+            t_col = np.full_like(x, float(default_time), dtype=np.float32)
+        cols.append(t_col)
+
+    mask = np.ones_like(x, dtype=bool)
+    for c in cols:
+        mask &= np.isfinite(c)
+    if not np.any(mask):
+        raise ValueError("过滤 NaN 后无有效点")
+    return np.column_stack([c[mask] for c in cols]).astype(np.float32, copy=False)
+
+
+def pointcloud_to_bin(pc, output_path, target_format=None, default_intensity=0.0, default_time=0.0):
+    if target_format is None:
+        target_format = _infer_target_format_from_pc(pc)
+    target_format = target_format.lower()
+    if target_format not in {"xyz", "xyzi", "xyzit"}:
+        raise ValueError("target_format 必须为 'xyz'/'xyzi'/'xyzit'")
+
+    data = _compose_bin_data(
+        pc,
+        target_format=target_format,
+        default_intensity=default_intensity,
+        default_time=default_time,
+    )
+    out_dir = os.path.dirname(output_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+    data.astype(np.float32, copy=False).tofile(output_path)
+    return output_path
+
+
+def pcd_to_bin(input_path, output_path=None, target_format=None, default_intensity=0.0, default_time=0.0):
+    if not os.path.exists(input_path):
+        raise FileNotFoundError(f"PCD file not found: {input_path}")
+    pc = PointCloud.from_path(input_path)
+    if output_path is None:
+        base, _ = os.path.splitext(input_path)
+        output_path = base + ".bin"
+    return pointcloud_to_bin(
+        pc,
+        output_path=output_path,
+        target_format=target_format,
+        default_intensity=default_intensity,
+        default_time=default_time,
+    )
+
+
+def pcd_bytes_to_bin(pcd_bytes, output_path=None, target_format=None, default_intensity=0.0, default_time=0.0):
+    if not isinstance(pcd_bytes, (bytes, bytearray)):
+        raise ValueError("pcd_bytes must be bytes")
+    pc = PointCloud.from_bytes(pcd_bytes)
+    if target_format is None:
+        target_format = _infer_target_format_from_pc(pc)
+    target_format = target_format.lower()
+    if target_format not in {"xyz", "xyzi", "xyzit"}:
+        raise ValueError("target_format 必须为 'xyz'/'xyzi'/'xyzit'")
+    data = _compose_bin_data(
+        pc,
+        target_format=target_format,
+        default_intensity=default_intensity,
+        default_time=default_time,
+    )
+    bin_bytes = data.astype(np.float32, copy=False).tobytes()
+    if output_path is None:
+        return bin_bytes
+    out_dir = os.path.dirname(output_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+    with open(output_path, "wb") as f:
+        f.write(bin_bytes)
+    return output_path
 
 
 class PointCloud(object):

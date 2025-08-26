@@ -294,141 +294,86 @@ print(f"过滤前: {pc.points} 点")
 print(f"过滤后: {filtered_pc.points} 点")
 ```
 
-## 性能优化
+## PCD ↔ BIN 转换
 
-### 批量处理
+支持将 PCD 转换为原始二进制 .bin（无头，float32，小端）以及从 .bin 读取为 PCD。
+
+支持格式：
+
+- xyz: [x,y,z]
+- xyzi: [x,y,z,intensity]
+- xyzit: [x,y,z,intensity,time]
+
+字段别名：
+
+- intensity: 'intensity' 或 'i'
+- time: 't'、'time'、'timestamp'
+
+NaN 过滤：在将要写出的所有列上共同过滤 NaN/Inf。
+
+### 自动模式（根据 PCD 字段自动选择格式）
 
 ```python
-import os
-from concurrent.futures import ProcessPoolExecutor
+from wind_pypcd.pypcd import pcd_to_bin
 
-def process_single_pcd(file_path):
-    """处理单个PCD文件"""
-    try:
-        # 加载并变换
-        transform = np.eye(4)
-        transform[2, 3] = 1.0  # z方向平移1米
-        
-        result = transform_pcd(file_path, transform)
-        
-        # 保存结果
-        output_path = file_path.replace('.pcd', '_transformed.pcd')
-        # 这里需要额外的保存逻辑
-        return output_path
-    except Exception as e:
-        print(f"处理 {file_path} 失败: {e}")
-        return None
+# 未指定 target_format，将自动选择：
+# - 精确 {x,y,z} -> xyz.bin
+# - 精确 {x,y,z,intensity} -> xyzi.bin
+# - 精确 {x,y,z,intensity,time} -> xyzit.bin
+# - 其他：若至少含 xyz + intensity -> 回退为 xyzi 并给出 warnings.warn
 
-# 批量处理多个文件
-pcd_files = ['file1.pcd', 'file2.pcd', 'file3.pcd']
-
-with ProcessPoolExecutor(max_workers=4) as executor:
-    results = list(executor.map(process_single_pcd, pcd_files))
-
-print(f"处理完成，结果: {[r for r in results if r is not None]}")
+pcd_to_bin('sample_xyz.pcd')           # 输出 sample_xyz.bin（xyz）
+pcd_to_bin('sample_xyzi.pcd')          # 输出 sample_xyzi.bin（xyzi）
+pcd_to_bin('sample_xyzit.pcd')         # 输出 sample_xyzit.bin（xyzit）
 ```
 
-### 内存优化
+### 强制模式（指定目标格式，缺失字段用默认值补齐）
 
 ```python
-# 对于大文件，使用字节流处理避免重复加载
-def efficient_multi_transform(file_path, transforms):
-    """对同一文件应用多个变换"""
-    # 只加载一次
-    pcd_bytes = load_pcd_as_bytes(file_path)
-    
-    results = []
-    for i, transform in enumerate(transforms):
-        # 使用字节数据变换
-        result = transform_pcd_from_bytes(pcd_bytes, transform)
-        results.append(result)
-    
-    return results
+from wind_pypcd.pypcd import pcd_to_bin
+
+# 指定输出为 xyzi，若缺少 intensity 则使用默认值 0.0
+pcd_to_bin('input.pcd', target_format='xyzi', default_intensity=0.0)
+
+# 指定输出为 xyzit，缺少 intensity/time 时分别用 0.0 补齐
+pcd_to_bin('input.pcd', target_format='xyzit', default_intensity=0.0, default_time=0.0)
 ```
 
-## 错误处理
+### 从 PointCloud 对象直接输出 .bin
 
 ```python
-from main import _validate_transform_matrix
+from wind_pypcd.pypcd import pointcloud_to_bin
+import wind_pypcd.pypcd as pypcd
 
-try:
-    # 验证变换矩阵
-    invalid_matrix = np.array([[1, 2], [3, 4]])  # 错误的矩阵大小
-    _validate_transform_matrix(invalid_matrix)
-except ValueError as e:
-    print(f"变换矩阵错误: {e}")
-
-try:
-    # 文件操作
-    pc = pypcd.PointCloud.from_path('nonexistent.pcd')
-except FileNotFoundError:
-    print("文件不存在")
-except Exception as e:
-    print(f"读取文件错误: {e}")
-
-try:
-    # 融合操作
-    result = fuse_pointclouds([])  # 空列表
-except ValueError as e:
-    print(f"融合参数错误: {e}")
+pc = pypcd.PointCloud.from_path('input.pcd')
+pointcloud_to_bin(pc, 'out.bin')                    # 自动模式
+pointcloud_to_bin(pc, 'out_xyzi.bin', 'xyzi')       # 强制 xyzi
+pointcloud_to_bin(pc, 'out_xyzit.bin', 'xyzit', 0.0, 0.0)
 ```
 
-## API 参考
-
-### 核心函数
-
-#### 变换函数
-
-- `transform_point_cloud(pc, transform)` - 变换点云对象
-- `transform_pcd(pcd_path, transform)` - 从文件路径变换
-- `transform_pcd_from_bytes(pcd_bytes, transform)` - 从字节数据变换
-
-#### 融合函数
-
-- `fusion_pcd(datas, calib, save_path)` - 基础文件融合
-- `fusion_pcd_bytes(datas_bytes, calib, compression)` - 字节数据融合
-- `fuse_pointclouds(lidar_objs)` - 高级融合与3D过滤
-
-#### 工具函数
-
-- `load_pcd_as_bytes(file_path)` - 加载PCD为字节数据
-- `save_bytes_as_pcd(pcd_bytes, file_path)` - 保存字节数据为PCD
-- `numpy_array_to_structured_array(arr)` - NumPy数组转换
-
-#### PointCloud 类方法
-
-- `from_path(path)` - 从文件读取
-- `from_bytes(data)` - 从字节数据读取
-- `from_array(array)` - 从NumPy数组创建
-- `to_bytes(compression)` - 转换为字节数据
-- `save_pcd(path, compression)` - 保存到文件
-
-### 参数说明
-
-#### 变换矩阵格式
+### 字节流版本（bytes -> .bin）
 
 ```python
-# 4x4 齐次变换矩阵
-transform = np.array([
-    [R11, R12, R13, tx],  # 旋转和x平移
-    [R21, R22, R23, ty],  # 旋转和y平移  
-    [R31, R32, R33, tz],  # 旋转和z平移
-    [0.0, 0.0, 0.0, 1.0]  # 齐次坐标
-])
+from wind_pypcd.pypcd import pcd_bytes_to_bin
+
+with open('input.pcd', 'rb') as f:
+    pcd_bytes = f.read()
+
+# 返回 bytes，不落盘
+bin_bytes = pcd_bytes_to_bin(pcd_bytes)
+
+# 直接写文件
+pcd_bytes_to_bin(pcd_bytes, 'output.bin', target_format='xyzit', default_intensity=0.0, default_time=0.0)
 ```
 
-#### 3D Box 定义
+### 从 .bin 读取为 PCD
 
 ```python
-box = {
-    "x": 0.0,        # 中心x坐标
-    "y": 0.0,        # 中心y坐标
-    "z": 0.0,        # 中心z坐标
-    "length": 10.0,  # x方向长度
-    "width": 5.0,    # y方向宽度
-    "height": 3.0,   # z方向高度
-    "yaw": 0.0       # 绕z轴旋转角度（弧度）
-}
+import wind_pypcd.pypcd as pypcd
+
+# 支持 xyzi / xyz
+pc = pypcd.PointCloud.from_bin('velodyne.bin', format='xyzi')
+pc.save_pcd('velodyne.pcd', compression='binary_compressed')
 ```
 
 ## 常见问题

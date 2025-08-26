@@ -730,3 +730,22 @@ if __name__ == "__main__":
     
     # 测试新的fuse_pointclouds函数
     test_fuse_pointclouds()
+
+    # 测试 PCD -> BIN 转换（调用库API）
+    try:
+        print("\n=== 测试 PCD -> BIN 转换 ===")
+        input_path = "test_data/front_lidar.pcd"
+        # 自动模式（按 PCD 字段推断）
+        output_path_1 = "test_data/results/front_lidar.bin"
+        out1 = pypcd.pcd_to_bin(input_path, output_path_1)
+        print(f"自动模式输出: {out1}")
+        # 强制 xyzi（若缺字段将用默认值）
+        output_path_2 = "test_data/results/front_lidar_xyzi.bin"
+        out2 = pypcd.pcd_to_bin(input_path, output_path_2, 'xyzi', 0.0)
+        print(f"强制 xyzi 输出: {out2}")
+        # 强制 xyzit 并指定输出路径
+        output_path_3 = "test_data/results/front_lidar_xyzit.bin"
+        out3 = pypcd.pcd_to_bin(input_path, output_path_3, 'xyzit', 0.0, 0.0)
+        print(f"强制 xyzit 输出: {out3}")
+    except Exception as e:
+        print(f"PCD->BIN 测试失败: {e}")
