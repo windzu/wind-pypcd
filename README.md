@@ -22,8 +22,8 @@ pip install wind-pypcd
 或者从源码安装：
 
 ```bash
-git clone https://github.com/windzu/wind_pypcd.git
-cd wind_pypcd
+git clone https://github.com/windzu/wind-pypcd.git
+cd wind-pypcd
 pip install -e .
 ```
 
