@@ -11,7 +11,7 @@ Wind-Pypcd 是一个功能强大的 Python 库，专门用于处理点云数据�
 - 🔗 多点云融合 - 多传感器数据融合
 - 📊 与 NumPy 数组的无缝集成
 - ✅ 完整的类型注解和参数验证
-- 🐍 Python 3.6+ 兼容性
+- 🐍 支持 Python 3.8-3.10 与 3.12
 
 ## 安装
 
@@ -29,7 +29,7 @@ pip install -e .
 
 ## 依赖
 
-- Python 3.6+
+- Python 3.8-3.10、3.12
 - NumPy
 - python-lzf
 
@@ -408,6 +408,25 @@ A:
 2. 对于重复操作，缓存加载的数据
 3. 使用 `binary_compressed` 压缩格式
 4. 合理设置忽略区域减少计算量
+
+## 开发与测试
+
+- 项目支持 Python 3.8-3.10 与 3.12，推荐使用 [uv](https://github.com/astral-sh/uv) 管理多版本解释器：
+
+    ```bash
+    uv python install 3.8 3.9 3.10 3.12
+    ```
+
+- 通过 tox 统一执行测试矩阵（内部会设置 `PYTHONPATH=src` 来复用源码中的示例数据）：
+
+    ```bash
+    tox              # 运行全部 Python 版本
+    tox -e py312     # 只运行单一 Python 版本
+    tox -- tests/test_pypcd.py -k binary  # 传递自定义 pytest 参数
+    ```
+
+- 若使用 uv，也可以通过 `uv run --with tox tox -e py312` 的方式在指定环境中运行。
+- 发布流程（含版本号、changelog、Release+PyPI 自动化）详见 `docs/release_workflow.md`。
 
 ## 完整示例
 

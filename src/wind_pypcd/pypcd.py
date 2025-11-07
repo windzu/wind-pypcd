@@ -1,4 +1,5 @@
 import copy
+import io
 import os
 import re
 import struct
@@ -8,6 +9,7 @@ from io import StringIO
 import lzf
 import numpy as np
 
+numpy_pc2 = None
 HAS_SENSOR_MSGS = True
 try:
     from sensor_msgs.msg import PointField
@@ -25,7 +27,7 @@ __all__ = [
     "point_cloud_from_buffer",
     "point_cloud_from_fileobj",
     "point_cloud_from_bytes",
-    "point_cloud_to_bytes", 
+    "point_cloud_to_bytes",
     "make_xyz_point_cloud",
     "make_xyz_rgb_point_cloud",
     "make_xyz_label_point_cloud",
@@ -83,7 +85,7 @@ def parse_header(lines):
             continue
         ln = ln.replace(" _ ", " s ", 1)
         ln = ln.replace(" _ ", " m ", 1)
-        match = re.match("(\w+)\s+([\w\s\.]+)", ln)
+        match = re.match(r"(\w+)\s+([\w\s\.]+)", ln)
         if not match:
             warnings.warn("warning: can't understand line: %s" % ln)
             continue
@@ -244,7 +246,10 @@ def parse_binary_pc_data(f, dtype, metadata):
     rowstep = metadata["points"] * dtype.itemsize
     # for some reason pcl adds empty space at the end of files
     buf = f.read(rowstep)
-    return np.fromstring(buf, dtype=dtype)
+    pc_array = np.frombuffer(buf, dtype=dtype)
+    if not pc_array.flags.writeable:
+        pc_array = pc_array.copy()
+    return pc_array
 
 
 def parse_binary_compressed_pc_data(f, dtype, metadata):
@@ -269,7 +274,9 @@ def parse_binary_compressed_pc_data(f, dtype, metadata):
     for dti in range(len(dtype)):
         dt = dtype[dti]
         bytes = dt.itemsize * metadata["width"]
-        column = np.fromstring(buf[ix : (ix + bytes)], dt)
+        column = np.frombuffer(buf[ix : (ix + bytes)], dtype=dt)
+        if not column.flags.writeable:
+            column = column.copy()
         pc_data[dtype.names[dti]] = column
         ix += bytes
     return pc_data
@@ -310,10 +317,10 @@ def point_cloud_from_path(fname):
 
 def point_cloud_from_buffer(buf):
     """从字符串缓冲区加载点云数据
-    
+
     Args:
         buf (str): PCD格式的字符串数据
-        
+
     Returns:
         PointCloud: 点云对象
     """
@@ -325,47 +332,48 @@ def point_cloud_from_buffer(buf):
 
 def point_cloud_from_bytes(data):
     """从字节数据加载点云数据
-    
+
     Args:
         data (bytes): PCD格式的字节数据
-        
+
     Returns:
         PointCloud: 点云对象
     """
     import io
 
     # 先查找头部结束位置（DATA行之后）
-    data_pos = data.find(b'DATA ')
+    data_pos = data.find(b"DATA ")
     if data_pos == -1:
         raise ValueError("Invalid PCD format: DATA field not found")
-    
+
     # 找到DATA行的结尾
-    data_line_end = data.find(b'\n', data_pos)
+    data_line_end = data.find(b"\n", data_pos)
     if data_line_end == -1:
         raise ValueError("Invalid PCD format: DATA line incomplete")
-    
+
     # 提取头部信息
-    header_bytes = data[:data_line_end + 1]
+    header_bytes = data[: data_line_end + 1]
     try:
-        header_str = header_bytes.decode('utf-8')
+        header_str = header_bytes.decode("utf-8")
     except UnicodeDecodeError:
         try:
-            header_str = header_bytes.decode('latin-1')
+            header_str = header_bytes.decode("latin-1")
         except UnicodeDecodeError:
             raise ValueError("Unable to decode PCD header")
-    
+
     # 检查数据格式
-    if b'DATA ascii' in data:
+    if b"DATA ascii" in data:
         # ASCII格式，整个文件都可以解码为字符串
         try:
-            buf = data.decode('utf-8')
+            buf = data.decode("utf-8")
         except UnicodeDecodeError:
-            buf = data.decode('latin-1')
+            buf = data.decode("latin-1")
         return point_cloud_from_buffer(buf)
     else:
         # 二进制格式，需要特殊处理
         # 创建一个临时文件对象来处理二进制数据
         import tempfile
+
         with tempfile.NamedTemporaryFile() as tmp_file:
             tmp_file.write(data)
             tmp_file.flush()
@@ -375,19 +383,17 @@ def point_cloud_from_bytes(data):
 
 def point_cloud_to_bytes(pc, compression=None):
     """将点云数据转换为字节数据
-    
+
     Args:
         pc (PointCloud): 点云对象
         compression (str): 压缩格式，可选 "ascii", "binary", "binary_compressed"
-        
+
     Returns:
         bytes: PCD格式的字节数据
     """
-    import io
-
     # 首先转换为字符串缓冲区
     string_buffer = StringIO()
-    
+
     # 获取元数据并写入头部
     metadata = pc.get_metadata()
     if compression is not None:
@@ -397,17 +403,17 @@ def point_cloud_to_bytes(pc, compression=None):
 
     header = write_header(metadata)
     string_buffer.write(header)
-    
+
     if metadata["data"].lower() == "ascii":
         fmtstr = build_ascii_fmtstr(pc)
         np.savetxt(string_buffer, pc.pc_data, fmt=fmtstr)
         # 对于ASCII格式，返回编码后的字节数据
-        return string_buffer.getvalue().encode('utf-8')
+        return string_buffer.getvalue().encode("utf-8")
     else:
         # 对于二进制格式，需要混合处理
-        header_bytes = string_buffer.getvalue().encode('utf-8')
+        header_bytes = string_buffer.getvalue().encode("utf-8")
         data_bytes = b""  # 初始化data_bytes
-        
+
         if metadata["data"].lower() == "binary":
             data_bytes = pc.pc_data.tobytes()
         elif metadata["data"].lower() == "binary_compressed":
@@ -422,8 +428,10 @@ def point_cloud_to_bytes(pc, compression=None):
             compressed = lzf.compress(uncompressed)
             compressed_size = len(compressed)
             # 写入压缩头部信息
-            data_bytes = struct.pack("<II", compressed_size, uncompressed_size) + compressed
-        
+            data_bytes = (
+                struct.pack("<II", compressed_size, uncompressed_size) + compressed
+            )
+
         return header_bytes + data_bytes
 
 
@@ -437,14 +445,30 @@ def point_cloud_to_fileobj(pc, fileobj, data_compression=None):
         assert data_compression in ("ascii", "binary", "binary_compressed")
         metadata["data"] = data_compression
 
-    header = write_header(metadata).encode("utf-8")
-    fileobj.write(header)
-    if metadata["data"].lower() == "ascii":
+    header_text = write_header(metadata)
+
+    def _write_text_block(text):
+        if isinstance(fileobj, io.TextIOBase):
+            fileobj.write(text)
+        else:
+            fileobj.write(text.encode("utf-8"))
+
+    data_kind = metadata["data"].lower()
+
+    if data_kind == "ascii":
+        _write_text_block(header_text)
         fmtstr = build_ascii_fmtstr(pc)
-        np.savetxt(fileobj, pc.pc_data, fmt=fmtstr)
-    elif metadata["data"].lower() == "binary":
-        fileobj.write(pc.pc_data.tostring())
-    elif metadata["data"].lower() == "binary_compressed":
+        if isinstance(fileobj, io.TextIOBase):
+            np.savetxt(fileobj, pc.pc_data, fmt=fmtstr)
+        else:
+            text_buf = StringIO()
+            np.savetxt(text_buf, pc.pc_data, fmt=fmtstr)
+            _write_text_block(text_buf.getvalue())
+    elif data_kind == "binary":
+        _write_text_block(header_text)
+        fileobj.write(pc.pc_data.tobytes())
+    elif data_kind == "binary_compressed":
+        _write_text_block(header_text)
         # TODO
         # a '_' field is ignored by pcl and breakes compressed point clouds.
         # changing '_' to '_padding' or other name fixes this.
@@ -452,7 +476,7 @@ def point_cloud_to_fileobj(pc, fileobj, data_compression=None):
         # reorder to column-by-column
         uncompressed_lst = []
         for fieldname in pc.pc_data.dtype.names:
-            column = np.ascontiguousarray(pc.pc_data[fieldname]).tostring()
+            column = np.ascontiguousarray(pc.pc_data[fieldname]).tobytes()
             uncompressed_lst.append(column)
         uncompressed = b"".join(uncompressed_lst)
         uncompressed_size = len(uncompressed)
@@ -479,9 +503,20 @@ def point_cloud_to_path(pc, fname):
 
 
 def point_cloud_to_buffer(pc, data_compression=None):
-    fileobj = StringIO()
-    point_cloud_to_fileobj(pc, fileobj, data_compression)
-    return fileobj.getvalue()
+    metadata = pc.get_metadata()
+    if data_compression is not None:
+        data_kind = data_compression.lower()
+    else:
+        data_kind = metadata["data"].lower()
+
+    if data_kind == "ascii":
+        fileobj = StringIO()
+        point_cloud_to_fileobj(pc, fileobj, data_compression)
+        return fileobj.getvalue()
+
+    byte_buffer = io.BytesIO()
+    point_cloud_to_fileobj(pc, byte_buffer, data_compression)
+    return byte_buffer.getvalue()
 
 
 def save_point_cloud(pc, fname):
@@ -509,7 +544,7 @@ def save_xyz_label(pc, fname, use_default_lbl=False):
     if not use_default_lbl and ("label" not in md["fields"]):
         raise Exception("label is not a field in this point cloud")
     with open(fname, "w") as f:
-        for i in xrange(pc.points):
+        for i in range(pc.points):
             x, y, z = [
                 "%.4f" % d
                 for d in (pc.pc_data["x"][i], pc.pc_data["y"][i], pc.pc_data["z"][i])
@@ -525,7 +560,7 @@ def save_xyz_intensity_label(pc, fname, use_default_lbl=False):
     if "intensity" not in md["fields"]:
         raise Exception("intensity is not a field in this point cloud")
     with open(fname, "w") as f:
-        for i in xrange(pc.points):
+        for i in range(pc.points):
             x, y, z = [
                 "%.4f" % d
                 for d in (pc.pc_data["x"][i], pc.pc_data["y"][i], pc.pc_data["z"][i])
@@ -544,7 +579,7 @@ def save_txt(pc, fname, header=True):
                 if cnt == 1:
                     header_lst.append(field_name)
                 else:
-                    for c in xrange(cnt):
+                    for c in range(cnt):
                         header_lst.append("%s_%04d" % (field_name, c))
             f.write(" ".join(header_lst) + "\n")
         fmtstr = build_ascii_fmtstr(pc)
@@ -584,7 +619,7 @@ def add_fields(pc, metadata, pc_data):
             fieldnames.append(f)
             typenames.append(np_type)
         else:
-            fieldnames.extend(["%s_%04d" % (f, i) for i in xrange(c)])
+            fieldnames.extend(["%s_%04d" % (f, i) for i in range(c)])
             typenames.extend([np_type] * c)
     dtype = list(zip(fieldnames, typenames))
     # new dtype. could be inferred?
@@ -695,8 +730,7 @@ def encode_rgb_for_pcl(rgb):
 
 
 def decode_rgb_from_pcl(rgb):
-    rgb = rgb.copy()
-    rgb.dtype = np.uint32
+    rgb = rgb.view(np.uint32).copy()
     r = np.asarray((rgb >> 16) & 255, dtype=np.uint8)
     g = np.asarray((rgb >> 8) & 255, dtype=np.uint8)
     b = np.asarray(rgb & 255, dtype=np.uint8)
@@ -867,7 +901,9 @@ def _compose_bin_data(pc, target_format, default_intensity=None, default_time=No
     return np.column_stack([c[mask] for c in cols]).astype(np.float32, copy=False)
 
 
-def pointcloud_to_bin(pc, output_path, target_format=None, default_intensity=0.0, default_time=0.0):
+def pointcloud_to_bin(
+    pc, output_path, target_format=None, default_intensity=0.0, default_time=0.0
+):
     if target_format is None:
         target_format = _infer_target_format_from_pc(pc)
     target_format = target_format.lower()
@@ -887,7 +923,13 @@ def pointcloud_to_bin(pc, output_path, target_format=None, default_intensity=0.0
     return output_path
 
 
-def pcd_to_bin(input_path, output_path=None, target_format=None, default_intensity=0.0, default_time=0.0):
+def pcd_to_bin(
+    input_path,
+    output_path=None,
+    target_format=None,
+    default_intensity=0.0,
+    default_time=0.0,
+):
     if not os.path.exists(input_path):
         raise FileNotFoundError(f"PCD file not found: {input_path}")
     pc = PointCloud.from_path(input_path)
@@ -903,7 +945,13 @@ def pcd_to_bin(input_path, output_path=None, target_format=None, default_intensi
     )
 
 
-def pcd_bytes_to_bin(pcd_bytes, output_path=None, target_format=None, default_intensity=0.0, default_time=0.0):
+def pcd_bytes_to_bin(
+    pcd_bytes,
+    output_path=None,
+    target_format=None,
+    default_intensity=0.0,
+    default_time=0.0,
+):
     if not isinstance(pcd_bytes, (bytes, bytearray)):
         raise ValueError("pcd_bytes must be bytes")
     pc = PointCloud.from_bytes(pcd_bytes)
@@ -1026,6 +1074,7 @@ class PointCloud(object):
             return np.array([x, y, z, intensity]).T
         else:
             return np.array([x, y, z]).T
+
     @staticmethod
     def from_path(fname):
         return point_cloud_from_path(fname)
@@ -1055,107 +1104,73 @@ class PointCloud(object):
     def from_array(arr):
         """create a PointCloud object from an array."""
         pc_data = arr.copy()
+        field_names = pc_data.dtype.names
+        if field_names is None:
+            raise ValueError("arr must be a structured array with named fields")
         md = {
-            "version": 0.7,
-            "fields": [],
+            "version": "0.7",
+            "fields": list(field_names),
             "size": [],
             "count": [],
-            "width": 0,
+            "width": len(pc_data),
             "height": 1,
             "viewpoint": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
-            "points": 0,
+            "points": len(pc_data),
             "type": [],
             "data": "binary_compressed",
         }
-        md["fields"] = pc_data.dtype.names
         for field in md["fields"]:
             type_, size_ = numpy_type_to_pcd_type[pc_data.dtype.fields[field][0]]
             md["type"].append(type_)
             md["size"].append(size_)
             # TODO handle multicount
             md["count"].append(1)
-        md["width"] = len(pc_data)
-        md["points"] = len(pc_data)
         pc = PointCloud(md, pc_data)
         return pc
 
     @staticmethod
     def from_array_without_dtype(arr, format="xyzi"):
         """create a PointCloud object from an array."""
-        pc_data = arr.copy()
-
-        md = {
-            "version": 0.7,
-            "fields": [],
-            "size": [],
-            "count": [],
-            "width": 0,
-            "height": 1,
-            "viewpoint": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
-            "points": 0,
-            "type": [],
-            "data": "binary_compressed",
-        }
+        arr_np = np.asarray(arr, dtype=np.float32)
+        if arr_np.ndim != 2:
+            raise ValueError("arr must be a 2D array")
 
         if format == "xyzi":
-            dtype = np.dtype(
-                [
-                    ("x", np.float32),
-                    ("y", np.float32),
-                    ("z", np.float32),
-                    ("intensity", np.float32),
-                ]
-            )
-            # append dtype info to pc_data
-            pc_data = np.array(
-                [tuple(x) for x in pc_data],
-                dtype=dtype,
-            )
-            # fill metadata
-            md["fields"] = ["x", "y", "z", "intensity"]
-            md["type"] = ["F", "F", "F", "F"]
-            md["size"] = [4, 4, 4, 4]
-            md["count"] = [1, 1, 1, 1]
+            field_order = ["x", "y", "z", "intensity"]
         elif format == "xyz":
-            dtype = np.dtype([("x", np.float32), ("y", np.float32), ("z", np.float32)])
-            pc_data = np.array(
-                [tuple(x) for x in pc_data],
-                dtype=dtype,
-            )
-
-            # fill metadata
-            md["fields"] = ["x", "y", "z"]
-            md["type"] = ["F", "F", "F"]
-            md["size"] = [4, 4, 4]
-            md["count"] = [1, 1, 1]
+            field_order = ["x", "y", "z"]
         else:
             raise ValueError("format must be xyzi or xyz")
 
-        md["width"] = pc_data.shape[0]
-        md["points"] = pc_data.shape[0]
+        if arr_np.shape[1] != len(field_order):
+            raise ValueError("arr has incompatible shape for format %s" % format)
+
+        dtype = np.dtype([(name, np.float32) for name in field_order])
+        structured = np.ascontiguousarray(arr_np).view(dtype).reshape(-1)
 
         md = {
-            "version": 0.7,
-            "fields": [],
+            "version": "0.7",
+            "fields": field_order,
             "size": [],
             "count": [],
-            "width": 0,
+            "width": structured.shape[0],
             "height": 1,
             "viewpoint": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
-            "points": 0,
+            "points": structured.shape[0],
             "type": [],
             "data": "binary_compressed",
         }
-        md["fields"] = pc_data.dtype.names
+        dtype_fields = structured.dtype.fields or {}
         for field in md["fields"]:
-            type_, size_ = numpy_type_to_pcd_type[pc_data.dtype.fields[field][0]]
+            field_info = dtype_fields.get(field)
+            if field_info is None:
+                raise KeyError(f"Missing field '{field}' in structured dtype")
+            np_dtype = field_info[0]
+            type_, size_ = numpy_type_to_pcd_type[np_dtype]
             md["type"].append(type_)
             md["size"].append(size_)
-            # TODO handle multicount
             md["count"].append(1)
-        md["width"] = len(pc_data)
-        md["points"] = len(pc_data)
-        pc = PointCloud(md, pc_data)
+        pc = PointCloud(md, structured)
         return pc
 
     @staticmethod

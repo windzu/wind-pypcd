@@ -12,3 +12,6 @@ pip-selfcheck.json
 .vscode/
 *.egg-info/
 test_data/results/
+.venv/
+.tox/
+__pypackages__/
