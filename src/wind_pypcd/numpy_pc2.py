@@ -3,9 +3,10 @@ Author: wind windzu1@gmail.com
 Date: 2023-08-30 12:50:13
 LastEditors: wind windzu1@gmail.com
 LastEditTime: 2023-08-30 13:17:50
-Description: 
-Copyright (c) 2023 by windzu, All Rights Reserved. 
+Description:
+Copyright (c) 2023 by windzu, All Rights Reserved.
 """
+
 # Software License Agreement (BSD License)
 #
 # Copyright (c) 2008, Willow Garage, Inc.
@@ -140,14 +141,17 @@ def pointcloud2_to_array(cloud_msg, split_rgb=False, remove_padding=True):
 
     Reshapes the returned array to have shape (height, width), even if the height is 1.
 
-    The reason for using np.fromstring rather than struct.unpack is speed... especially
+    The reason for using np.frombuffer rather than struct.unpack is speed... especially
     for large point clouds, this will be <much> faster.
     """
     # construct a numpy record type equivalent to the point type of this cloud
     dtype_list = pointcloud2_to_dtype(cloud_msg)
+    dtype = np.dtype(dtype_list)
 
     # parse the cloud into an array
-    cloud_arr = np.fromstring(cloud_msg.data, dtype_list)
+    cloud_arr = np.frombuffer(cloud_msg.data, dtype=dtype)
+    if not cloud_arr.flags.writeable:
+        cloud_arr = cloud_arr.copy()
 
     # remove nan points
     # if remove_nans:
@@ -319,10 +323,11 @@ def array_to_pointcloud2(cloud_arr, stamp=None, frame_id=None, merge_rgb=False):
     cloud_msg.is_bigendian = False  # assumption
     cloud_msg.point_step = cloud_arr.dtype.itemsize
     cloud_msg.row_step = cloud_msg.point_step * cloud_arr.shape[1]
+    dtype_names = cloud_arr.dtype.names or ()
     cloud_msg.is_dense = all(
-        [np.isfinite(cloud_arr[fname]).all() for fname in cloud_arr.dtype.names]
+        np.isfinite(cloud_arr[fname]).all() for fname in dtype_names
     )
-    cloud_msg.data = cloud_arr.tostring()
+    cloud_msg.data = cloud_arr.tobytes()
     return cloud_msg
 
 
@@ -337,10 +342,7 @@ def merge_rgb_fields(cloud_arr):
     g = np.asarray(cloud_arr["g"], dtype=np.uint32)
     b = np.asarray(cloud_arr["b"], dtype=np.uint32)
     rgb_arr = np.array((r << 16) | (g << 8) | (b << 0), dtype=np.uint32)
-
-    # not sure if there is a better way to do this. i'm changing the type of the array
-    # from uint32 to float32, but i don't want any conversion to take place -jdb
-    rgb_arr.dtype = np.float32
+    rgb_arr = rgb_arr.view(np.float32)
 
     # create a new array, without r, g, and b, but with rgb float32 field
     new_dtype = []
@@ -352,7 +354,7 @@ def merge_rgb_fields(cloud_arr):
     new_cloud_arr = np.zeros(cloud_arr.shape, new_dtype)
 
     # fill in the new array
-    for field_name in new_cloud_arr.dtype.names:
+    for field_name in new_cloud_arr.dtype.names or ():
         if field_name == "rgb":
             new_cloud_arr[field_name] = rgb_arr
         else:
@@ -367,8 +369,7 @@ def split_rgb_field(cloud_arr):
 
     (pcl stores rgb in packed 32 bit floats)
     """
-    rgb_arr = cloud_arr["rgb"].copy()
-    rgb_arr.dtype = np.uint32
+    rgb_arr = cloud_arr["rgb"].view(np.uint32).copy()
     r = np.asarray((rgb_arr >> 16) & 255, dtype=np.uint8)
     g = np.asarray((rgb_arr >> 8) & 255, dtype=np.uint8)
     b = np.asarray(rgb_arr & 255, dtype=np.uint8)
@@ -385,7 +386,7 @@ def split_rgb_field(cloud_arr):
     new_cloud_arr = np.zeros(cloud_arr.shape, new_dtype)
 
     # fill in the new array
-    for field_name in new_cloud_arr.dtype.names:
+    for field_name in new_cloud_arr.dtype.names or ():
         if field_name == "r":
             new_cloud_arr[field_name] = r
         elif field_name == "g":
